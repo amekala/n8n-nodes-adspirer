@@ -1,0 +1,170 @@
+{
+  "name": "Google Ads Budget Overspend Alert via Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Weekdays at Noon",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "googleAds",
+        "operation": "wastedSpend",
+        "lookback_days": 1
+      },
+      "id": "wasted-spend",
+      "name": "Analyze Wasted Spend",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [220, 0],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "googleAds",
+        "operation": "budgetOptimization",
+        "lookback_days": 7
+      },
+      "id": "budget-optimization",
+      "name": "Budget Recommendations",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [220, 200],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [440, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst wastedSpend = items[0]?.json?.data?.content || '';\nconst budgetRecs = items[1]?.json?.data?.content || '';\n\n// Check if there's meaningful waste to report\nconst hasIssues = wastedSpend.length > 50;\n\nreturn [{\n  json: {\n    has_issues: hasIssues,\n    message: hasIssues\n      ? `*Budget Alert*\\n\\n*Wasted Spend Analysis:*\\n${wastedSpend}\\n\\n*Budget Recommendations:*\\n${budgetRecs}`\n      : 'No significant budget issues detected today.'\n  }\n}];"
+      },
+      "id": "check-threshold",
+      "name": "Check & Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_issues }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-issues",
+      "name": "Issues Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-alerts",
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1100, 0],
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "",
+          "name": "Slack OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekdays at Noon": {
+      "main": [
+        [
+          { "node": "Analyze Wasted Spend", "type": "main", "index": 0 },
+          { "node": "Budget Recommendations", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Analyze Wasted Spend": {
+      "main": [
+        [{ "node": "Merge", "type": "main", "index": 0 }]
+      ]
+    },
+    "Budget Recommendations": {
+      "main": [
+        [{ "node": "Merge", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [{ "node": "Check & Format", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check & Format": {
+      "main": [
+        [{ "node": "Issues Found?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Issues Found?": {
+      "main": [
+        [{ "node": "Slack Alert", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  },
+  "tags": [
+    { "name": "Marketing" },
+    { "name": "Google Ads" },
+    { "name": "Slack" },
+    { "name": "Alerts" },
+    { "name": "Budget" }
+  ]
+}

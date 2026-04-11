@@ -1,0 +1,148 @@
+{
+  "name": "Weekly Cross-Platform Ad Report to Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "googleAds",
+        "operation": "campaignPerformance",
+        "lookback_days": 7
+      },
+      "id": "google-ads-perf",
+      "name": "Google Ads (7 days)",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [220, -100],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "metaAds",
+        "operation": "campaignPerformance",
+        "lookback_days": 7
+      },
+      "id": "meta-ads-perf",
+      "name": "Meta Ads (7 days)",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [220, 100],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine Google Ads and Meta Ads results into a single report row\nconst items = $input.all();\nconst googleData = items[0]?.json?.data?.content || 'No Google Ads data';\nconst metaData = items[1]?.json?.data?.content || 'No Meta Ads data';\nconst week = new Date().toISOString().split('T')[0];\n\nreturn [{\n  json: {\n    week_ending: week,\n    google_ads_summary: googleData,\n    meta_ads_summary: metaData\n  }\n}];"
+      },
+      "id": "format-row",
+      "name": "Format Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "list" },
+        "sheetName": { "__rl": true, "mode": "list" },
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "google-sheets",
+      "name": "Append to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [880, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 8am": {
+      "main": [
+        [
+          { "node": "Google Ads (7 days)", "type": "main", "index": 0 },
+          { "node": "Meta Ads (7 days)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Ads (7 days)": {
+      "main": [
+        [{ "node": "Merge Results", "type": "main", "index": 0 }]
+      ]
+    },
+    "Meta Ads (7 days)": {
+      "main": [
+        [{ "node": "Merge Results", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [{ "node": "Format Sheet Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Sheet Row": {
+      "main": [
+        [{ "node": "Append to Google Sheets", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  },
+  "tags": [
+    { "name": "Marketing" },
+    { "name": "Google Ads" },
+    { "name": "Meta Ads" },
+    { "name": "Google Sheets" },
+    { "name": "Reporting" }
+  ]
+}

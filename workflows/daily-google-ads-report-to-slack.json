@@ -1,0 +1,99 @@
+{
+  "name": "Daily Google Ads Performance Report to Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "googleAds",
+        "operation": "campaignPerformance",
+        "lookback_days": 1
+      },
+      "id": "adspirer-performance",
+      "name": "Google Ads Performance",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [220, 0],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the Adspirer response into a Slack-friendly message\nconst data = $input.first().json;\nconst content = data.data?.content || JSON.stringify(data);\n\n// Build Slack message\nconst today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });\n\nreturn [{\n  json: {\n    text: `*Google Ads Daily Report — ${today}*\\n\\n${content}`\n  }\n}];"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "channel": "#marketing",
+        "text": "={{ $json.text }}",
+        "otherOptions": {}
+      },
+      "id": "slack-post",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [660, 0],
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "",
+          "name": "Slack OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9am": {
+      "main": [
+        [{ "node": "Google Ads Performance", "type": "main", "index": 0 }]
+      ]
+    },
+    "Google Ads Performance": {
+      "main": [
+        [{ "node": "Format Report", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Report": {
+      "main": [
+        [{ "node": "Post to Slack", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  },
+  "tags": [
+    { "name": "Marketing" },
+    { "name": "Google Ads" },
+    { "name": "Slack" },
+    { "name": "Reporting" }
+  ]
+}

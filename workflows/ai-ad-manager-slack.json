@@ -1,0 +1,92 @@
+{
+  "name": "AI Ad Manager in Slack — Adspirer + Claude",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are an AI advertising manager powered by Adspirer. You help users analyze ad campaign performance, research keywords, optimize budgets, and create campaigns across Google Ads and Meta Ads.\n\nWhen users ask about their ads, use the Adspirer tools to get real data. Be concise and actionable in your responses.\n\nAlways specify the lookback_days parameter (default to 30 if not mentioned)."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {}
+      },
+      "id": "claude-model",
+      "name": "Claude",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [220, 200],
+      "credentials": {
+        "anthropicApi": {
+          "id": "",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "platform": "googleAds",
+        "operation": "campaignPerformance"
+      },
+      "id": "adspirer-tool",
+      "name": "Adspirer",
+      "type": "n8n-nodes-adspirer.adspirer",
+      "typeVersion": 1,
+      "position": [440, 200],
+      "credentials": {
+        "adspireOAuth2Api": {
+          "id": "",
+          "name": "Adspirer OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [{ "node": "AI Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude": {
+      "ai_languageModel": [
+        [{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]
+      ]
+    },
+    "Adspirer": {
+      "ai_tool": [
+        [{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  },
+  "tags": [
+    { "name": "Marketing" },
+    { "name": "AI" },
+    { "name": "Google Ads" },
+    { "name": "Meta Ads" },
+    { "name": "Claude" }
+  ]
+}
