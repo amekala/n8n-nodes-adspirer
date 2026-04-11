@@ -1,0 +1,27 @@
+{
+	"node": "n8n-nodes-adspirer.adspirer",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Marketing & Growth"],
+	"subcategories": {
+		"Marketing & Growth": ["Advertising"]
+	},
+	"alias": [
+		"ads",
+		"google ads",
+		"meta ads",
+		"facebook ads",
+		"advertising",
+		"ppc",
+		"campaign",
+		"keyword research",
+		"performance marketing"
+	],
+	"resources": {
+		"primaryDocumentation": [
+			{
+				"url": "https://www.adspirer.com/docs/quickstart"
+			}
+		]
+	}
+}
