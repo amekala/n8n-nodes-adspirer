@@ -15,84 +15,49 @@ export const googleAdsOperations: INodeProperties[] = [
 				value: 'budgetOptimization',
 				action: 'Get google ads budget recommendations',
 				description: 'Get budget allocation and optimization recommendations',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/budget-optimization',
-					},
-				},
 			},
 			{
 				name: 'Campaign Performance',
 				value: 'campaignPerformance',
 				action: 'Analyze google ads campaign performance',
 				description: 'Get performance metrics for all campaigns over a date range',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/performance',
-					},
-				},
 			},
 			{
 				name: 'Create PMax Campaign',
 				value: 'createPmaxCampaign',
 				action: 'Create a google performance max campaign',
 				description: 'Create a new Performance Max campaign with assets',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/create-pmax-campaign',
-					},
-				},
 			},
 			{
 				name: 'Create Search Campaign',
 				value: 'createSearchCampaign',
 				action: 'Create a google search campaign',
 				description: 'Create a new Google Search campaign with keywords and ads',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/create-search-campaign',
-					},
-				},
 			},
 			{
 				name: 'Keyword Research',
 				value: 'keywordResearch',
 				action: 'Research google ads keywords',
 				description: 'Research keywords with CPC, search volume, and competition data',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/keyword-research',
-					},
-				},
+			},
+			{
+				name: 'List Campaigns',
+				value: 'listCampaigns',
+				action: 'List all google ads campaigns',
+				description: 'Get a list of all campaigns with status and type',
 			},
 			{
 				name: 'Search Terms Analysis',
 				value: 'searchTerms',
 				action: 'Analyze google ads search terms',
-				description: 'Analyze search term performance and find negative keyword opportunities',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/search-terms',
-					},
-				},
+				description:
+					'Analyze search term performance and find negative keyword opportunities',
 			},
 			{
 				name: 'Wasted Spend Analysis',
 				value: 'wastedSpend',
 				action: 'Analyze wasted google ads spend',
 				description: 'Identify wasted ad spend and get optimization recommendations',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/api/v1/actions/google-ads/wasted-spend',
-					},
-				},
 			},
 		],
 		default: 'campaignPerformance',
@@ -104,7 +69,14 @@ export const googleAdsFields: INodeProperties[] = [
 	{
 		displayName: 'Lookback Days',
 		name: 'lookback_days',
-		type: 'number',
+		type: 'options',
+		options: [
+			{ name: '7 Days', value: 7 },
+			{ name: '30 Days', value: 30 },
+			{ name: '60 Days', value: 60 },
+			{ name: '90 Days', value: 90 },
+			{ name: '120 Days', value: 120 },
+		],
 		default: 30,
 		description: 'Number of days to look back for analysis',
 		displayOptions: {
@@ -116,12 +88,6 @@ export const googleAdsFields: INodeProperties[] = [
 					'budgetOptimization',
 					'searchTerms',
 				],
-			},
-		},
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.lookback_days',
 			},
 		},
 	},
@@ -137,17 +103,56 @@ export const googleAdsFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				platform: ['googleAds'],
-				operation: [
-					'campaignPerformance',
-					'wastedSpend',
-					'budgetOptimization',
-				],
 			},
 		},
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.customer_id',
+	},
+
+	// List campaigns: status filter
+	{
+		displayName: 'Status Filter',
+		name: 'status_filter',
+		type: 'options',
+		options: [
+			{ name: 'All', value: 'all' },
+			{ name: 'Enabled', value: 'enabled' },
+			{ name: 'Paused', value: 'paused' },
+		],
+		default: 'all',
+		description: 'Filter campaigns by status',
+		displayOptions: {
+			show: {
+				platform: ['googleAds'],
+				operation: ['listCampaigns'],
+			},
+		},
+	},
+
+	// Wasted spend / budget optimization: target ROAS
+	{
+		displayName: 'Target ROAS',
+		name: 'target_roas',
+		type: 'number',
+		default: 3,
+		description: 'Target return on ad spend for optimization recommendations',
+		displayOptions: {
+			show: {
+				platform: ['googleAds'],
+				operation: ['wastedSpend', 'budgetOptimization'],
+			},
+		},
+	},
+
+	// Budget optimization: total budget
+	{
+		displayName: 'Total Budget (USD)',
+		name: 'total_budget',
+		type: 'number',
+		default: 0,
+		description: 'Total budget to allocate across campaigns (0 = use current total)',
+		displayOptions: {
+			show: {
+				platform: ['googleAds'],
+				operation: ['budgetOptimization'],
 			},
 		},
 	},
@@ -166,12 +171,6 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.keywords',
-			},
-		},
 	},
 	{
 		displayName: 'Business Description',
@@ -185,12 +184,6 @@ export const googleAdsFields: INodeProperties[] = [
 				operation: ['keywordResearch'],
 			},
 		},
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.business_description',
-			},
-		},
 	},
 	{
 		displayName: 'Landing Page URL',
@@ -202,12 +195,6 @@ export const googleAdsFields: INodeProperties[] = [
 			show: {
 				platform: ['googleAds'],
 				operation: ['keywordResearch'],
-			},
-		},
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.landing_page_url',
 			},
 		},
 	},
@@ -226,12 +213,6 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.campaign_name',
-			},
-		},
 	},
 	{
 		displayName: 'Daily Budget (USD)',
@@ -246,12 +227,6 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.daily_budget',
-			},
-		},
 	},
 	{
 		displayName: 'Campaign Keywords',
@@ -266,12 +241,6 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.keywords',
-			},
-		},
 	},
 	{
 		displayName: 'Target Locations',
@@ -283,12 +252,6 @@ export const googleAdsFields: INodeProperties[] = [
 			show: {
 				platform: ['googleAds'],
 				operation: ['createSearchCampaign', 'createPmaxCampaign'],
-			},
-		},
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.target_locations',
 			},
 		},
 	},
@@ -305,12 +268,6 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.final_url',
-			},
-		},
 	},
 
 	// Create PMax campaign fields
@@ -327,11 +284,5 @@ export const googleAdsFields: INodeProperties[] = [
 			},
 		},
 		required: true,
-		routing: {
-			send: {
-				type: 'body',
-				property: 'arguments.campaign_name',
-			},
-		},
 	},
 ];

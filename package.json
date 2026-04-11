@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-adspirer",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "n8n community node for Adspirer — manage ad campaigns across Google, Meta, LinkedIn & TikTok Ads via AI",
 	"license": "MIT",
 	"homepage": "https://www.adspirer.com",
