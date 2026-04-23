@@ -13,10 +13,10 @@ export class AdspireApi implements ICredentialType {
 
 	icon: Icon = { light: 'file:../icons/adspirer.svg', dark: 'file:../icons/adspirer.dark.svg' };
 
-	documentationUrl = 'https://www.adspirer.com/docs/quickstart';
+	documentationUrl = 'https://www.adspirer.com/docs/api-reference/introduction';
 
 	description =
-		'Sign up at adspirer.ai, then get your API key from your account settings.';
+		'Generate an API key at https://adspirer.ai/keys. Keys are prefixed sk_live_ — treat them as secrets.';
 
 	properties: INodeProperties[] = [
 		{
@@ -25,7 +25,9 @@ export class AdspireApi implements ICredentialType {
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
-			description: 'Your Adspirer API key. Get one at adspirer.com/settings.',
+			placeholder: 'sk_live_...',
+			required: true,
+			description: 'Your Adspirer API key from https://adspirer.ai/keys',
 		},
 	];
 
@@ -40,9 +42,10 @@ export class AdspireApi implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: 'https://mcp.adspirer.com',
-			url: '/api/v1/actions/health',
-			method: 'GET',
+			baseURL: 'https://api.adspirer.ai',
+			url: '/api/v1/tools/list_connected_accounts/execute',
+			method: 'POST',
+			body: { arguments: {} },
 		},
 	};
 }

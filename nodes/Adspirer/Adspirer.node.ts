@@ -1,15 +1,45 @@
 import {
+	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
 	type IExecuteFunctions,
+	type IHttpRequestOptions,
 	type INodeExecutionData,
 	type INodeType,
 	type INodeTypeDescription,
+	type JsonObject,
 } from 'n8n-workflow';
-import { authenticationSelect, platformSelect } from './shared/descriptions';
+import { platformSelect } from './shared/descriptions';
 import { googleAdsOperations, googleAdsFields } from './resources/googleAds';
-import { metaAdsOperations, metaAdsFields } from './resources/metaAds';
-import { TOOL_NAME_MAP, buildToolArguments } from './shared/toolMapping';
+import { TOOL_NAME_MAP, buildToolArguments, isWriteTool } from './shared/toolMapping';
+
+const API_BASE_URL = 'https://api.adspirer.ai';
+
+interface AdspireSuccessEnvelope {
+	success: true;
+	tool: string;
+	data: {
+		text?: string;
+		structured?: unknown;
+		quota?: {
+			tier?: string;
+			used?: number;
+			limit?: number;
+			period_end?: string;
+			upgrade_url?: string;
+		};
+	};
+}
+
+interface AdspireErrorEnvelope {
+	success: false;
+	is_error?: boolean;
+	error: string;
+	tool?: string;
+	quota?: { upgrade_url?: string };
+}
+
+type AdspireEnvelope = AdspireSuccessEnvelope | AdspireErrorEnvelope;
 
 export class Adspirer implements INodeType {
 	description: INodeTypeDescription = {
@@ -18,10 +48,9 @@ export class Adspirer implements INodeType {
 		icon: { light: 'file:adspirer.svg', dark: 'file:adspirer.dark.svg' },
 		group: ['transform'],
 		version: 1,
-		subtitle:
-			'={{$parameter["platform"] === "googleAds" ? "Google Ads" : "Meta Ads"}} — {{$parameter["operation"]}}',
+		subtitle: '={{"Google Ads — " + $parameter["operation"]}}',
 		description:
-			'Manage ad campaigns across Google Ads and Meta Ads — performance analysis, keyword research, budget optimization, and campaign creation',
+			'Manage ad campaigns across Google, Meta, LinkedIn & TikTok Ads via the Adspirer REST API',
 		defaults: {
 			name: 'Adspirer',
 		},
@@ -30,102 +59,110 @@ export class Adspirer implements INodeType {
 		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
-				name: 'adspireOAuth2Api',
-				required: true,
-				displayOptions: {
-					show: {
-						authentication: ['oAuth2'],
-					},
-				},
-			},
-			{
 				name: 'adspireApi',
 				required: true,
-				displayOptions: {
-					show: {
-						authentication: ['apiKey'],
-					},
-				},
 			},
 		],
-		properties: [
-			authenticationSelect,
-			platformSelect,
-			...googleAdsOperations,
-			...metaAdsOperations,
-			...googleAdsFields,
-			...metaAdsFields,
-		],
+		properties: [platformSelect, ...googleAdsOperations, ...googleAdsFields],
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+		const workflowExecId = this.getExecutionId();
 
 		for (let i = 0; i < items.length; i++) {
 			const platform = this.getNodeParameter('platform', i) as string;
 			const operation = this.getNodeParameter('operation', i) as string;
-			const authentication = this.getNodeParameter('authentication', i) as string;
 
-			// Map UI operation to MCP tool name
 			const toolKey = `${platform}.${operation}`;
 			const toolName = TOOL_NAME_MAP[toolKey];
 
 			if (!toolName) {
-				throw new NodeOperationError(this.getNode(), `Unknown operation: ${platform}.${operation}`);
+				throw new NodeOperationError(
+					this.getNode(),
+					`Unknown operation: ${platform}.${operation}`,
+					{ itemIndex: i },
+				);
 			}
 
-			// Build tool arguments from node parameters
 			const toolArguments = buildToolArguments(this, i, platform, operation);
 
-			// Build MCP JSON-RPC request
-			const rpcBody = {
-				jsonrpc: '2.0',
-				id: `n8n-${Date.now()}-${i}`,
-				method: 'tools/call',
-				params: {
-					name: toolName,
-					arguments: toolArguments,
-				},
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json',
+				Accept: 'application/json',
+			};
+			if (isWriteTool(toolName)) {
+				headers['Idempotency-Key'] = `n8n-${workflowExecId}-${i}`;
+			}
+
+			const requestOptions: IHttpRequestOptions = {
+				method: 'POST',
+				url: `${API_BASE_URL}/api/v1/tools/${toolName}/execute`,
+				body: { arguments: toolArguments },
+				json: true,
+				headers,
+				returnFullResponse: true,
+				// n8n surfaces statusCode ourselves so we can handle 402/429 specifically
+				ignoreHttpStatusErrors: true,
 			};
 
-			// Determine credential type
-			const credentialType =
-				authentication === 'oAuth2' ? 'adspireOAuth2Api' : 'adspireApi';
-
-			// Call MCP server
 			const response = await this.helpers.httpRequestWithAuthentication.call(
 				this,
-				credentialType,
-				{
-					method: 'POST',
-					url: 'https://mcp.adspirer.com/mcp',
-					body: rpcBody,
-					json: true,
-					headers: {
-						'Content-Type': 'application/json',
-						Accept: 'application/json, text/event-stream',
-					},
-				},
+				'adspireApi',
+				requestOptions,
 			);
+			const statusCode = response.statusCode as number;
+			const envelope = response.body as AdspireEnvelope;
 
-			// Parse MCP response
-			const result = response.result ?? response;
-			const contentItems = result.content ?? [];
-			const contentText =
-				contentItems
-					.filter((c: { type: string }) => c.type === 'text')
-					.map((c: { text: string }) => c.text)
-					.join('\n') || '';
-			const isError = result.isError === true;
+			if (!envelope) {
+				throw new NodeOperationError(this.getNode(), 'Empty response from Adspirer API', {
+					itemIndex: i,
+				});
+			}
 
+			if (statusCode === 402) {
+				const upgradeUrl = (envelope as AdspireErrorEnvelope).quota?.upgrade_url;
+				const message =
+					((envelope as AdspireErrorEnvelope).error ??
+						'Adspirer quota exhausted for this billing period') +
+					(upgradeUrl ? ` — upgrade at ${upgradeUrl}` : '');
+				throw new NodeApiError(this.getNode(), envelope as unknown as JsonObject, {
+					message,
+					itemIndex: i,
+					httpCode: '402',
+				});
+			}
+
+			if (statusCode === 401) {
+				throw new NodeApiError(this.getNode(), envelope as unknown as JsonObject, {
+					message:
+						'Invalid or missing Adspirer API key. Generate a new key at https://adspirer.ai/keys.',
+					itemIndex: i,
+					httpCode: '401',
+				});
+			}
+
+			if (statusCode >= 400 || envelope.success === false) {
+				const errMessage =
+					(envelope as AdspireErrorEnvelope).error ?? `Adspirer API error (${statusCode})`;
+				throw new NodeApiError(this.getNode(), envelope as unknown as JsonObject, {
+					message: errMessage,
+					itemIndex: i,
+					httpCode: String(statusCode),
+				});
+			}
+
+			const success = envelope as AdspireSuccessEnvelope;
 			returnData.push({
 				json: {
-					success: !isError,
+					success: true,
 					platform,
 					operation,
 					tool: toolName,
-					content: contentText,
+					text: success.data.text ?? '',
+					structured: success.data.structured ?? null,
+					_adspirer_quota: success.data.quota ?? null,
 				},
 			});
 		}
