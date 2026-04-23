@@ -1,126 +1,70 @@
 import type { IExecuteFunctions } from 'n8n-workflow';
+import { findTool } from './build-properties';
+import type { ToolMeta } from '../generated/tools';
 
 /**
- * Maps n8n UI operation keys to MCP tool names.
- * Format: "platform.operation" → "mcp_tool_name"
+ * Resolve the underlying REST tool name from the n8n UI selection.
+ * Returns the tool metadata so callers can also read read-only/destructive flags.
  */
-export const TOOL_NAME_MAP: Record<string, string> = {
-	// Google Ads
-	'googleAds.budgetOptimization': 'optimize_budget_allocation',
-	'googleAds.campaignPerformance': 'get_campaign_performance',
-	'googleAds.createPmaxCampaign': 'create_pmax_campaign',
-	'googleAds.createSearchCampaign': 'create_search_campaign',
-	'googleAds.keywordResearch': 'research_keywords',
-	'googleAds.listCampaigns': 'list_campaigns',
-	'googleAds.searchTerms': 'analyze_search_terms',
-	'googleAds.wastedSpend': 'analyze_wasted_spend',
-
-	// Meta Ads
-	'metaAds.adPerformance': 'analyze_meta_ad_performance',
-	'metaAds.audienceInsights': 'get_meta_audience_insights',
-	'metaAds.campaignPerformance': 'get_meta_campaign_performance',
-	'metaAds.listCampaigns': 'list_meta_campaigns',
-	'metaAds.wastedSpend': 'analyze_meta_wasted_spend',
-};
+export function resolveTool(platform: string, operationId: string): ToolMeta | undefined {
+	return findTool(platform as ToolMeta['platform'], operationId);
+}
 
 /**
- * Builds MCP tool arguments from n8n node parameters.
- * Only includes parameters that have non-empty values.
+ * A tool is a "write" operation if it's not read-only. Destructive implies write.
+ * Used to decide whether to send an Idempotency-Key header.
+ */
+export function isWriteTool(tool: ToolMeta): boolean {
+	return !tool.readOnly;
+}
+
+/**
+ * n8n parameter names that belong to our own UI (the Platform and Operation
+ * dropdowns). REST tool args with the same name would collide — getNodeParameter
+ * would return our dropdown value instead of a user-filled tool arg. We skip
+ * them here so they're never sent to the REST API by default. When the tool
+ * is invoked as an AI Agent tool, the agent can still set these via its input
+ * (merged in by supplyData).
+ */
+const RESERVED_UI_PARAM_NAMES = new Set(['platform', 'operation']);
+
+/**
+ * Build the REST API's `arguments` payload from n8n's UI parameters.
+ * Only includes values the user actually filled in.
  */
 export function buildToolArguments(
 	context: IExecuteFunctions,
 	itemIndex: number,
-	platform: string,
-	operation: string,
+	tool: ToolMeta,
 ): Record<string, unknown> {
 	const args: Record<string, unknown> = {};
 
-	// Helper to safely get optional parameters
-	const getParam = (name: string, fallback?: unknown): unknown => {
+	for (const arg of tool.args) {
+		if (RESERVED_UI_PARAM_NAMES.has(arg.name)) continue;
+
+		let value: unknown;
 		try {
-			const value = context.getNodeParameter(name, itemIndex, fallback);
-			if (value === '' || value === undefined || value === null) return undefined;
-			return value;
+			value = context.getNodeParameter(arg.name, itemIndex);
 		} catch {
-			return undefined;
+			continue;
 		}
-	};
 
-	// Common: lookback_days
-	const lookbackDays = getParam('lookback_days');
-	if (lookbackDays !== undefined) args.lookback_days = lookbackDays;
+		if (value === '' || value === undefined || value === null) {
+			if (arg.required) {
+				// let the server throw a clear 400 — better than us guessing
+				continue;
+			}
+			continue;
+		}
 
-	// Google Ads: customer_id
-	if (platform === 'googleAds') {
-		const customerId = getParam('customer_id');
-		if (customerId !== undefined) args.customer_id = customerId;
-	}
+		// Coerce numeric fields that we forced to string (optional numerics)
+		if ((arg.type === 'integer' || arg.type === 'number') && typeof value === 'string') {
+			const n = Number(value);
+			if (Number.isNaN(n)) continue;
+			value = arg.type === 'integer' ? Math.trunc(n) : n;
+		}
 
-	// Meta Ads: ad_account_id
-	if (platform === 'metaAds') {
-		const adAccountId = getParam('ad_account_id');
-		if (adAccountId !== undefined) args.ad_account_id = adAccountId;
-	}
-
-	// Operation-specific arguments
-	if (operation === 'keywordResearch') {
-		const keywords = getParam('keywords');
-		if (keywords !== undefined) args.seed_keywords = keywords;
-
-		const businessDescription = getParam('business_description');
-		if (businessDescription !== undefined) args.business_description = businessDescription;
-
-		const landingPageUrl = getParam('landing_page_url');
-		if (landingPageUrl !== undefined) args.website_url = landingPageUrl;
-	}
-
-	if (operation === 'wastedSpend') {
-		const targetRoas = getParam('target_roas');
-		if (targetRoas !== undefined) args.target_roas = targetRoas;
-	}
-
-	if (operation === 'budgetOptimization') {
-		const totalBudget = getParam('total_budget');
-		if (totalBudget !== undefined) args.total_budget = totalBudget;
-
-		const targetRoas = getParam('target_roas');
-		if (targetRoas !== undefined) args.target_roas = targetRoas;
-	}
-
-	if (operation === 'createSearchCampaign') {
-		const campaignName = getParam('campaign_name');
-		if (campaignName !== undefined) args.campaign_name = campaignName;
-
-		const dailyBudget = getParam('daily_budget');
-		if (dailyBudget !== undefined) args.budget_daily = dailyBudget;
-
-		const campaignKeywords = getParam('campaign_keywords');
-		if (campaignKeywords !== undefined) args.keywords = campaignKeywords;
-
-		const targetLocations = getParam('target_locations');
-		if (targetLocations !== undefined) args.target_locations = targetLocations;
-
-		const finalUrl = getParam('final_url');
-		if (finalUrl !== undefined) args.website_url = finalUrl;
-	}
-
-	if (operation === 'createPmaxCampaign') {
-		const pmaxName = getParam('pmax_campaign_name');
-		if (pmaxName !== undefined) args.campaign_name = pmaxName;
-
-		const dailyBudget = getParam('daily_budget');
-		if (dailyBudget !== undefined) args.budget_daily = dailyBudget;
-
-		const finalUrl = getParam('final_url');
-		if (finalUrl !== undefined) args.final_url = finalUrl;
-
-		const targetLocations = getParam('target_locations');
-		if (targetLocations !== undefined) args.target_locations = targetLocations;
-	}
-
-	if (operation === 'listCampaigns') {
-		const statusFilter = getParam('status_filter');
-		if (statusFilter !== undefined) args.status_filter = statusFilter;
+		args[arg.name] = value;
 	}
 
 	return args;

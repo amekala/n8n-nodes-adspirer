@@ -1,0 +1,202 @@
+import type { INodeProperties, INodePropertyOptions } from 'n8n-workflow';
+import { TOOLS, type ToolMeta, type ToolArg } from '../generated/tools';
+
+type Platform = ToolMeta['platform'];
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+	googleAds: 'Google Ads',
+	metaAds: 'Meta Ads',
+	linkedinAds: 'LinkedIn Ads',
+	tiktokAds: 'TikTok Ads',
+	utility: 'Utility',
+};
+
+export const PLATFORMS: Platform[] = Object.keys(PLATFORM_LABELS) as Platform[];
+
+export function getExposableTools(platform: Platform): ToolMeta[] {
+	return TOOLS.filter((t) => t.platform === platform && !t.skipped).sort((a, b) =>
+		a.displayName.localeCompare(b.displayName),
+	);
+}
+
+export function buildPlatformSelect(): INodeProperties {
+	return {
+		displayName: 'Platform',
+		name: 'platform',
+		type: 'options',
+		noDataExpression: true,
+		options: PLATFORMS.map((p) => ({ name: PLATFORM_LABELS[p], value: p })),
+		default: 'googleAds',
+		description: 'The advertising platform to use',
+	};
+}
+
+// Per-platform default operation — alphabetically-first exposable op. Hardcoded
+// as literal strings because n8n's lint (node-param-default-missing) requires a
+// static literal at the default: property site. Regenerate this map when the
+// OpenAPI surface shifts significantly.
+const PLATFORM_DEFAULTS: Record<Platform, string> = {
+	googleAds: 'analyzeSearchTerms',
+	metaAds: 'analyzeMetaAdPerformance',
+	linkedinAds: 'addLinkedinCreative',
+	tiktokAds: 'analyzeTiktokGeoPerformance',
+	utility: 'auditConversionTracking',
+};
+
+export function buildOperationsForPlatform(platform: Platform): INodeProperties[] {
+	const tools = getExposableTools(platform);
+	if (tools.length === 0) return [];
+
+	const options: INodePropertyOptions[] = tools.map((t) => ({
+		name: t.displayName,
+		value: t.operationId,
+		action: t.displayName,
+		description: t.description,
+	}));
+
+	// Build separate declarations per platform so lint sees a literal default.
+	switch (platform) {
+		case 'googleAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeSearchTerms',
+				},
+			];
+		case 'metaAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeMetaAdPerformance',
+				},
+			];
+		case 'linkedinAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'addLinkedinCreative',
+				},
+			];
+		case 'tiktokAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeTiktokGeoPerformance',
+				},
+			];
+		case 'utility':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'auditConversionTracking',
+				},
+			];
+		default: {
+			// exhaustive check — compile error if Platform gains a case
+			const _exhaustive: never = platform;
+			throw new Error(`Unknown platform: ${_exhaustive}`);
+		}
+	}
+}
+
+// re-export for tests / introspection
+export { PLATFORM_DEFAULTS };
+
+function argToProperty(platform: Platform, operationId: string, arg: ToolArg): INodeProperties {
+	const base: INodeProperties = {
+		displayName: arg.title,
+		name: arg.name,
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: {
+				platform: [platform],
+				operation: [operationId],
+			},
+		},
+		...(arg.description ? { description: arg.description } : {}),
+	};
+
+	if (arg.required) base.required = true;
+
+	if (arg.enum && arg.enum.length > 0) {
+		base.type = 'options';
+		base.options = arg.enum.map((v) => ({ name: String(v), value: v }));
+		base.default = arg.default ?? arg.enum[0];
+		return base;
+	}
+
+	switch (arg.type) {
+		case 'boolean':
+			base.type = 'boolean';
+			base.default = typeof arg.default === 'boolean' ? arg.default : false;
+			break;
+		case 'integer':
+		case 'number':
+			base.type = 'number';
+			base.default = typeof arg.default === 'number' ? arg.default : 0;
+			if (!arg.required) {
+				// allow empty so optional numerics can be omitted
+				base.default = '';
+				base.type = 'string';
+				base.placeholder = 'e.g. 30';
+				base.description =
+					(base.description ?? '') + ' (numeric — leave blank to omit)'.trim();
+			}
+			break;
+		case 'string':
+		default:
+			base.type = 'string';
+			base.default = typeof arg.default === 'string' ? arg.default : '';
+			break;
+	}
+	return base;
+}
+
+// Tool args whose names collide with our own n8n UI parameters. We can't
+// render a UI field for these (n8n's namespace is flat) — the only way to
+// pass them is via the AI Agent's structured input. See toolMapping.ts for
+// the matching skip in buildToolArguments.
+const RESERVED_UI_PARAM_NAMES = new Set(['platform', 'operation']);
+
+export function buildFieldsForPlatform(platform: Platform): INodeProperties[] {
+	const fields: INodeProperties[] = [];
+	for (const tool of getExposableTools(platform)) {
+		for (const arg of tool.args) {
+			if (RESERVED_UI_PARAM_NAMES.has(arg.name)) continue;
+			fields.push(argToProperty(platform, tool.operationId, arg));
+		}
+	}
+	return fields;
+}
+
+export { RESERVED_UI_PARAM_NAMES };
+
+export function findTool(platform: Platform, operationId: string): ToolMeta | undefined {
+	return TOOLS.find((t) => t.platform === platform && t.operationId === operationId);
+}

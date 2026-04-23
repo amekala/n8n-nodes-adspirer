@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-adspirer",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "n8n community node for Adspirer — manage ad campaigns across Google, Meta, LinkedIn & TikTok Ads via AI",
 	"license": "MIT",
 	"homepage": "https://www.adspirer.com",
@@ -16,6 +16,7 @@
 		"url": "https://github.com/amekala/n8n-nodes-adspirer.git"
 	},
 	"scripts": {
+		"codegen": "node scripts/generate-operations.js",
 		"build": "n8n-node build",
 		"build:watch": "tsc --watch",
 		"dev": "n8n-node dev",
@@ -31,12 +32,15 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/AdspireApi.credentials.js",
-			"dist/credentials/AdspireOAuth2Api.credentials.js"
+			"dist/credentials/AdspireApi.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/Adspirer/Adspirer.node.js"
 		]
+	},
+	"dependencies": {
+		"@langchain/core": "^0.3.0",
+		"zod": "^3.22.0"
 	},
 	"devDependencies": {
 		"@n8n/node-cli": ">=0.23.0",

@@ -3,83 +3,35 @@
 [![npm](https://img.shields.io/npm/v/n8n-nodes-adspirer)](https://www.npmjs.com/package/n8n-nodes-adspirer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
 
-[n8n](https://n8n.io/) community node for [Adspirer](https://adspirer.ai) — automate ad campaign management across Google Ads, Meta Ads, LinkedIn Ads, and TikTok Ads.
+[n8n](https://n8n.io/) community node for [Adspirer](https://adspirer.ai) — orchestrate ad campaigns across **Google Ads, Meta, LinkedIn, and TikTok** from any n8n workflow.
 
-Skip the dashboard. Build n8n workflows that monitor performance, optimize budgets, create campaigns, and alert your team — all on autopilot.
+Pick a platform, pick an operation, plug in your API key — n8n does the rest.
 
 <p align="center">
   <img src="icons/adspirer.svg" alt="Adspirer" width="80" />
 </p>
 
-## What is Adspirer?
+## Features
 
-Adspirer is an MCP (Model Context Protocol) server with **100+ advertising tools** across 4 ad platforms. It lets AI assistants manage ad campaigns through natural language — no dashboards needed.
-
-This n8n community node brings those same tools into n8n's workflow automation platform, so you can build automated ad workflows that run on schedules, respond to events, or power AI agents.
-
-**MCP Server:** [`https://mcp.adspirer.com/mcp`](https://mcp.adspirer.com/mcp)
-**MCP Registry:** [`com.adspirer/ads`](https://registry.modelcontextprotocol.io)
-**Plugin Repo:** [`amekala/ads-mcp`](https://github.com/amekala/ads-mcp)
-
-## Operations
-
-### Google Ads (7 operations)
-
-| Operation | Description |
-|-----------|-------------|
-| **Budget Optimization** | Get budget allocation and optimization recommendations |
-| **Campaign Performance** | Get performance metrics for all campaigns over a date range |
-| **Create PMax Campaign** | Create a new Performance Max campaign with assets |
-| **Create Search Campaign** | Create a new Google Search campaign with keywords and ads |
-| **Keyword Research** | Research keywords with real CPC, search volume, and competition data |
-| **Search Terms Analysis** | Analyze search term performance and find negative keyword opportunities |
-| **Wasted Spend Analysis** | Identify wasted ad spend and get optimization recommendations |
-
-### Meta Ads (3 operations)
-
-| Operation | Description |
-|-----------|-------------|
-| **Ad Performance** | Analyze individual ad and creative performance with fatigue detection |
-| **Audience Insights** | Get audience demographics, placement analysis, and targeting insights |
-| **Campaign Performance** | Get performance metrics for Meta ad campaigns |
-
-### AI Agent Compatible
-
-All operations are available as AI agent tools (`usableAsTool: true`). Add the Adspirer node as a tool to any n8n AI Agent and it can call any operation based on natural language instructions.
-
-## Authentication
-
-### OAuth2 (Recommended)
-
-1. Add the Adspirer node to your workflow
-2. Select **OAuth2 (Recommended)** authentication
-3. Click **Connect** — a browser window opens for OAuth authorization
-4. Sign in with your [Adspirer account](https://adspirer.ai) and authorize access
-5. Your credentials are saved — all future workflows use the same connection
-
-No API keys to manage. OAuth tokens refresh automatically.
-
-### API Key
-
-1. Sign up at [adspirer.ai](https://adspirer.ai) (free tier: 15 tool calls/month)
-2. Get your API key from your account settings
-3. Add the Adspirer node to your workflow
-4. Select **API Key** authentication
-5. Paste your API key
+- **~120 operations** across 5 resource groups: Google Ads, Meta Ads, LinkedIn Ads, TikTok Ads, and Utility diagnostics
+- **REST-native** — calls `https://api.adspirer.ai` via standard HTTP + Bearer auth. No SSE, no JSON-RPC
+- **Quota-aware** — every response includes your remaining monthly allowance in `$item.json._adspirer_quota`
+- **Idempotency built-in** — write operations automatically send an `Idempotency-Key` so retries don't double-charge you or duplicate campaigns
+- **AI Agent compatible** — set `usableAsTool: true`, surfaces directly in n8n's AI Agent tool picker
+- **Upgrade-aware errors** — a 402 quota response surfaces the Adspirer upgrade URL directly in the node's error output
 
 ## Installation
 
-### n8n Community Nodes (Recommended)
+### n8n (Cloud or self-hosted)
 
 1. Open your n8n instance
-2. Go to **Settings > Community Nodes**
-3. Click **Install a community node**
-4. Enter `n8n-nodes-adspirer`
-5. Click **Install**
+2. **Settings → Community Nodes → Install a community node**
+3. Enter `n8n-nodes-adspirer`
+4. Click **Install** — the node appears in the nodes panel under "Adspirer"
 
-The Adspirer node appears in the nodes panel, searchable by "Adspirer", "ads", "Google Ads", "Meta Ads", "campaign", "keyword research", or "ppc".
+The node is searchable by: `Adspirer`, `ads`, `Google Ads`, `Meta Ads`, `LinkedIn Ads`, `TikTok Ads`, `campaign`, `keyword research`, `ppc`.
 
-### Self-Hosted / Docker
+### Self-hosted via npm
 
 ```bash
 cd ~/.n8n
@@ -87,140 +39,168 @@ npm install n8n-nodes-adspirer
 # Restart n8n
 ```
 
-### n8n Cloud
+## Authentication
 
-Community nodes are available on n8n Cloud once verified. After verification, the node appears automatically in the nodes panel for all Cloud users.
+The node uses an API key. There is currently no OAuth2 option — the hosted REST API doesn't expose public OAuth endpoints yet.
 
-## Example Workflows
+1. Sign up at [adspirer.ai](https://adspirer.ai) — free tier includes 15 tool calls/month, no credit card
+2. Generate a key at [adspirer.ai/keys](https://adspirer.ai/keys) — keys are prefixed `sk_live_`, treat them as secrets
+3. In n8n: **Credentials → New → Adspirer API**, paste the key, save
+4. The credential test runs a free diagnostic call (`list_connected_accounts`) — expect a green ✓
 
-### 1. Daily Google Ads Performance Report to Slack
+## Usage
 
-Monitor campaign performance and get a summary in Slack every morning.
+After creating the credential:
 
-```
-Schedule Trigger (daily 9am)
-  → Adspirer: Campaign Performance (Google Ads, lookback: 1 day)
-  → Adspirer: Campaign Performance (Meta Ads, lookback: 1 day)
-  → Code Node: merge and format cross-platform report
-  → Slack: post to #marketing channel
-```
+1. Drop the **Adspirer** node onto any workflow
+2. Pick a **Platform** — Google Ads, Meta Ads, LinkedIn Ads, TikTok Ads, or Utility
+3. Pick an **Operation** from the dropdown (operations are filtered by platform)
+4. Fill required fields. Optional fields can be left blank.
+5. Execute
 
-### 2. Weekly Wasted Spend Alert
+Each successful execution returns:
 
-Catch budget waste early with weekly automated analysis.
-
-```
-Schedule Trigger (every Monday 8am)
-  → Adspirer: Wasted Spend Analysis (Google Ads, lookback: 7 days)
-  → Adspirer: Budget Optimization (Google Ads, lookback: 7 days)
-  → IF Node: wasted spend > $50?
-    → Yes: Slack alert + Google Sheets log
-    → No: skip
-```
-
-### 3. New Shopify Product → Google PMax Campaign
-
-Automatically create ad campaigns when new products are added.
-
-```
-Shopify Trigger (new product created)
-  → Adspirer: Create PMax Campaign (product name, URL, $30/day budget)
-  → Slack: notify marketing team with campaign details
-  → Google Sheets: log in campaign tracker
+```json
+{
+  "success": true,
+  "platform": "googleAds",
+  "operation": "listCampaigns",
+  "tool": "list_campaigns",
+  "text": "# 📋 Your Google Ads Campaigns\n\n**Total Campaigns:** 10\n...",
+  "structured": null,
+  "_adspirer_quota": {
+    "used": 8,
+    "limit": 150,
+    "tier": "plus",
+    "period_end": "2026-05-17"
+  }
+}
 ```
 
-### 4. CRM Deal → Retargeting Campaign
+- **`text`** — human-readable markdown summary of the result
+- **`structured`** — structured payload when the operation returns one (null otherwise)
+- **`_adspirer_quota`** — branch on this in subsequent nodes to avoid hitting your monthly limit
 
-Launch retargeting when a deal moves to a new stage.
+### Error handling
+
+| HTTP code | Meaning | Node behavior |
+|---|---|---|
+| `200` | Success | returns data |
+| `400` | Tool-level error (e.g. missing account) | throws with the error message |
+| `401` | Invalid/missing API key | throws with key-regeneration hint |
+| `402` | Monthly quota exhausted | throws with `upgrade_url` appended to the message |
+| `429` | Upstream ad platform rate-limited us | throws — enable **Retry on Fail** in node settings (30–60s backoff recommended) |
+| `5xx` | Server error | throws — enable **Retry on Fail** in node settings |
+
+Use n8n's per-node **Retry on Fail** setting instead of a custom backoff loop — it's the idiomatic pattern and compatible with n8n Cloud's verification requirements.
+
+## Example workflows
+
+### 1. Daily wasted-spend check across all platforms
 
 ```
-HubSpot Trigger (deal stage changed to "Proposal Sent")
-  → Adspirer: Keyword Research (brand + competitor terms)
-  → Adspirer: Create Search Campaign (branded search, $20/day)
-  → Gmail: notify account manager
+Schedule Trigger (daily 8am)
+  → Adspirer: Google Ads → Analyze Wasted Spend (lookback: 7)
+  → Adspirer: Meta Ads → Analyze Meta Wasted Spend (lookback: 7)
+  → Adspirer: LinkedIn Ads → Analyze LinkedIn Wasted Spend (lookback: 7)
+  → Code: merge + threshold check
+  → IF > $50 wasted → Slack #marketing
 ```
 
-### 5. AI Ad Manager in Slack
+### 2. New Shopify product → Google PMax campaign
 
-Let your team manage ads through natural language in Slack.
+```
+Shopify Trigger (new product)
+  → Adspirer: Google Ads → Create PMax Campaign
+     (name: {{ $json.title }}, budget: 30, final_url: {{ $json.url }})
+  → Slack: post campaign link
+  → Google Sheets: log in tracker
+```
+
+### 3. Weekly cross-platform report to Google Sheets
+
+```
+Schedule Trigger (Monday 9am)
+  → Adspirer: Google Ads → Get Campaign Performance (lookback: 7)
+  → Adspirer: Meta Ads → Analyze Meta Ad Performance (lookback: 7)
+  → Code: normalize metrics
+  → Google Sheets: append row
+  → Gmail: send to client
+```
+
+### 4. Quota-aware agent loop
+
+```
+Manual Trigger
+  → Adspirer: Utility → Get Usage Status
+  → IF _adspirer_quota.used < _adspirer_quota.limit * 0.8
+     Yes → AI Agent with Adspirer tool
+     No  → Slack: "Quota near limit, skipping optimization run"
+```
+
+### 5. HubSpot deal won → LinkedIn retargeting
+
+```
+HubSpot Trigger (deal stage = "Closed Won")
+  → Adspirer: LinkedIn Ads → Add LinkedIn Creative (custom ad for customer)
+  → Adspirer: LinkedIn Ads → Create LinkedIn Sponsored Content
+  → Slack: notify account manager
+```
+
+## AI Agent usage
+
+Every Adspirer operation is available as an AI Agent tool (`usableAsTool: true`). Add the Adspirer node to an **AI Agent** node's tool slot, configure the agent's model (Claude / GPT-4 / etc.), and the agent can pick operations from natural-language instructions:
 
 ```
 Chat Trigger (Slack)
-  → AI Agent (Claude / GPT-4)
-    → Adspirer node (all 10 operations available as tools)
-    → Google Sheets tool (for logging)
-  → Slack: post response
+  → AI Agent (Claude)
+     tools: Adspirer, Google Sheets
+  → Slack reply
 ```
 
-**Example conversation:**
-- "How are my Google Ads doing this week compared to last week?"
-- "Research keywords for emergency plumbing services in Chicago"
-- "Create a search campaign for luxury watches targeting New York with $50/day budget"
+**Example prompts that work:**
+- *"What are my top 3 Google Ads campaigns by ROAS this week?"*
+- *"Find wasted spend across all my Meta ad sets over the last 30 days"*
+- *"List all my connected ad accounts"*
 
-### 6. Cross-Platform Weekly Report to Google Sheets
+For **full agentic access to all ~180 Adspirer tools** (including ones that stream their response and aren't exposed by this REST-based node), use the [`n8n-nodes-mcp`](https://www.npmjs.com/package/n8n-nodes-mcp) community node pointed at `https://mcp.adspirer.com/mcp` with your `sk_live_` key as the Bearer token.
 
-Build a living dashboard with weekly performance data.
+## Operations summary
 
-```
-Schedule Trigger (every Friday 5pm)
-  → Adspirer: Campaign Performance (Google Ads, 7 days)
-  → Adspirer: Campaign Performance (Meta Ads, 7 days)
-  → Code Node: normalize metrics across platforms
-  → Google Sheets: append to "Weekly Performance" sheet
-  → Gmail: send formatted report to client
-```
+| Platform | Exposed | Notes |
+|---|---|---|
+| Google Ads | ~28 | Analytics, search term / keyword research, campaign ops, demand-gen |
+| Meta Ads | ~27 | Ad/audience analytics, campaign creation (single + carousel + DCO) |
+| LinkedIn Ads | ~32 | Creatives, campaign groups, conversions, lead forms, wasted spend |
+| TikTok Ads | ~20 | Campaign creation, geo/creative fatigue analytics |
+| Utility | ~12 | Diagnostics: `list_connected_accounts`, `get_usage_status`, monitors, audits |
 
-## Nodes That Pair Well With Adspirer
+**~60 additional tools** (complex creatives, asset bundles, detailed audience targeting) are exposed via the [REST API](https://api.adspirer.ai/docs) directly — those use array/object argument shapes that don't flatten into n8n's field UI. Invoke them with n8n's built-in **HTTP Request** node pointed at `POST https://api.adspirer.ai/api/v1/tools/{tool_name}/execute` using the same Adspirer API credential.
 
-| Category | Nodes | Use Case |
-|----------|-------|----------|
-| **Triggers** | Schedule, Webhook, Cron | Start monitoring/reporting workflows |
-| **CRM** | HubSpot, Salesforce, Pipedrive | Deal events → campaign creation |
-| **E-commerce** | Shopify, WooCommerce, Stripe | Product/order events → ad campaigns |
-| **Messaging** | Slack, Gmail, Teams, Discord, Twilio | Alerts, reports, notifications |
-| **Spreadsheets** | Google Sheets, Airtable, Notion | Dashboards, logging, tracking |
-| **AI** | AI Agent, OpenAI, Anthropic | Natural language ad management |
-| **Logic** | IF, Switch, Code, Merge | Threshold checks, data formatting |
-| **Forms** | Typeform, Google Forms | Client briefs → campaign setup |
+Live OpenAPI spec: https://api.adspirer.ai/openapi.json — regenerated automatically whenever the surface changes upstream.
 
 ## Pricing
 
-Adspirer uses a freemium model. Tool calls in n8n count against your Adspirer plan limits:
-
-| Plan | Tool Calls/Month | Price |
-|------|-----------------|-------|
+| Plan | Tool calls / month | Price |
+|---|---|---|
 | Free | 15 | $0 |
 | Plus | 150 | $49/mo |
 | Pro | 600 | $99/mo |
 | Max | 3,000 | $199/mo |
 
-Sign up at [adspirer.ai](https://adspirer.ai). No credit card required for the free tier.
+Sign up at [adspirer.ai](https://adspirer.ai).
 
-## Alternative: n8n Built-in MCP Nodes
+## Related
 
-If you prefer to use n8n's built-in MCP support (available since n8n v1.88.0) instead of this community node, you can connect directly to Adspirer's MCP server:
-
-1. Add the **MCP Client Tool** node as a sub-node to an AI Agent
-2. Set Transport: **Streamable HTTP**
-3. Set URL: `https://mcp.adspirer.com/mcp`
-4. Authenticate via OAuth 2.1 or Bearer token
-
-This gives you access to all 100+ Adspirer tools via the AI agent. The community node (this package) provides a more structured experience with typed operations and field validation for deterministic workflows.
-
-## Related Projects
-
-| Project | Description | Link |
-|---------|-------------|------|
-| **ads-mcp** | Adspirer MCP server registration + multi-IDE plugins (Claude Code, Cursor, Codex, OpenClaw) | [github.com/amekala/ads-mcp](https://github.com/amekala/ads-mcp) |
-| **Adspirer Docs** | Setup guides, platform docs, API reference | [adspirer.com/docs](https://www.adspirer.com/docs) |
-| **MCP Server** | Production MCP endpoint (Streamable HTTP) | `https://mcp.adspirer.com/mcp` |
-| **MCP Registry** | Model Context Protocol registry listing | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io) |
+- **[Adspirer MCP server](https://mcp.adspirer.com/mcp)** — the canonical tool surface, consumed by ChatGPT Connectors, Claude Desktop, and Claude Code. For n8n agentic workflows, use [`n8n-nodes-mcp`](https://www.npmjs.com/package/n8n-nodes-mcp) pointed at this URL.
+- **[REST API docs](https://www.adspirer.com/docs/api-reference/introduction)** — full endpoint reference, envelope, rate limits
+- **[adspirer.com](https://adspirer.com)** — product overview
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 22 LTS (required — Node 25 has compatibility issues with `isolated-vm`)
+- Node.js 22 LTS (required — Node 25 has compatibility issues with n8n-core's `isolated-vm` dependency)
 - npm
 
 ### Setup
@@ -235,66 +215,56 @@ npm install
 ### Commands
 
 ```bash
-npm run dev           # Start n8n locally on :5678 with this node loaded (hot reload)
+npm run codegen       # Regenerate operations from api.adspirer.ai/openapi.json
 npm run build         # Compile TypeScript → dist/
-npm run lint          # Check code quality (must pass for verification)
-npm run lint:fix      # Auto-fix lint issues
+npm run lint          # n8n community-node lint (must pass for verification)
+npm run lint:fix      # Autofix lint issues
+npm run dev           # Local n8n on :5678 with this node hot-reloaded
 npm run release       # Bump version, tag, push → GH Action publishes to npm
 ```
 
-### Testing Locally
+### How operations are generated
 
-```bash
-npm run dev
-```
+`npm run codegen` fetches `https://api.adspirer.ai/openapi.json`, filters tool endpoints, and emits `nodes/Adspirer/generated/tools.ts` — a typed metadata array. `shared/build-properties.ts` then turns that metadata into n8n's `INodeProperties[]` at module load:
 
-This starts a local n8n instance at `http://localhost:5678` with the Adspirer node pre-loaded. Create a workflow, add the Adspirer node, configure credentials, and test operations against your Adspirer account.
+- One **Platform** dropdown (5 options)
+- One **Operation** dropdown per platform, filtered by `displayOptions`
+- One field per argument with the correct type (string / number / boolean / enum)
 
-### Project Structure
+Tools whose arguments contain nested `array` or `object` types are skipped at codegen time with a `skipped` reason stored in the metadata. They still exist on the REST API — use the n8n HTTP Request node to call them.
+
+Idempotency-Key logic reads `x-adspirer-read-only` from the OpenAPI spec per-tool, so non-read operations automatically send an idempotency header.
+
+### Project structure
 
 ```
 n8n-nodes-adspirer/
 ├── credentials/
-│   ├── AdspireApi.credentials.ts         # API key auth
-│   └── AdspireOAuth2Api.credentials.ts   # OAuth 2.1 auth
-├── nodes/
-│   └── Adspirer/
-│       ├── Adspirer.node.ts              # Main node definition
-│       ├── Adspirer.node.json            # Codex metadata (categories, AI descriptions)
-│       ├── adspirer.svg                  # Icon (light mode)
-│       ├── adspirer.dark.svg             # Icon (dark mode)
-│       ├── resources/
-│       │   ├── googleAds.ts              # Google Ads operations + field definitions
-│       │   └── metaAds.ts                # Meta Ads operations + field definitions
-│       └── shared/
-│           └── descriptions.ts           # Shared field definitions
-├── icons/                                # Credential-level icons
-├── .github/workflows/
-│   ├── ci.yml                            # Lint + build on PR
-│   └── publish.yml                       # npm publish with provenance attestation
-├── package.json
-├── tsconfig.json
-└── eslint.config.mjs
+│   └── AdspireApi.credentials.ts       # API key Bearer auth, credential-test
+├── nodes/Adspirer/
+│   ├── Adspirer.node.ts                # Main node — execute() loop, error mapping
+│   ├── Adspirer.node.json              # Codex metadata (categories, AI hints)
+│   ├── generated/
+│   │   └── tools.ts                    # GENERATED from OpenAPI, do not hand-edit
+│   ├── shared/
+│   │   ├── build-properties.ts         # Turns TOOLS metadata → INodeProperties[]
+│   │   ├── toolMapping.ts              # resolveTool, buildToolArguments, isWriteTool
+│   │   └── descriptions.ts             # re-exports platformSelect
+│   ├── adspirer.svg / .dark.svg        # Node icons
+├── scripts/
+│   └── generate-operations.js          # Codegen (fetch OpenAPI → emit tools.ts)
+├── spec/
+│   └── openapi.json                    # Cached spec for reproducible builds
+├── icons/                              # Credential-level icons
+└── .github/workflows/                  # CI + provenance-attested npm publish
 ```
-
-### Publishing
-
-Releases are published to npm via GitHub Actions with provenance attestation (required for n8n Creator Portal verification). The workflow triggers on semver tags:
-
-```bash
-npm run release       # Interactive: bumps version, updates changelog, tags, pushes
-```
-
-The GitHub Action then builds, lints, and publishes to npm with OIDC provenance signing.
 
 ## Support
 
-- **Email:** abhi@adspirer.com
-- **Issues:** [github.com/amekala/n8n-nodes-adspirer/issues](https://github.com/amekala/n8n-nodes-adspirer/issues)
-- **Adspirer Issues:** [github.com/amekala/ads-mcp/issues](https://github.com/amekala/ads-mcp/issues)
 - **Website:** [adspirer.ai](https://adspirer.ai)
-- **Docs:** [adspirer.com/docs](https://www.adspirer.com/docs)
-- **Server Status:** [mcp.adspirer.com/health](https://mcp.adspirer.com/health)
+- **REST API docs:** [adspirer.com/docs/api-reference](https://www.adspirer.com/docs/api-reference/introduction)
+- **Issues:** [github.com/amekala/n8n-nodes-adspirer/issues](https://github.com/amekala/n8n-nodes-adspirer/issues)
+- **Email:** abhi@adspirer.com
 
 ## License
 

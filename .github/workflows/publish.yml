@@ -7,9 +7,10 @@ on:
 
 jobs:
   publish:
-    name: Publish to npm
+    name: Publish to npm with provenance
     runs-on: ubuntu-latest
 
+    # id-token:write is required for npm provenance / OIDC trusted publishing
     permissions:
       id-token: write
       contents: read
@@ -22,13 +23,27 @@ jobs:
         with:
           node-version: 'lts/*'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Release
+      - name: Verify tag matches package.json version
         run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm run release
+          TAG="${GITHUB_REF_NAME}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ($TAG) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
