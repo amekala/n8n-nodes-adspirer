@@ -9,9 +9,13 @@ import {
 	type INodeTypeDescription,
 	type JsonObject,
 } from 'n8n-workflow';
-import { platformSelect } from './shared/descriptions';
-import { googleAdsOperations, googleAdsFields } from './resources/googleAds';
-import { TOOL_NAME_MAP, buildToolArguments, isWriteTool } from './shared/toolMapping';
+import {
+	PLATFORMS,
+	buildFieldsForPlatform,
+	buildOperationsForPlatform,
+	buildPlatformSelect,
+} from './shared/build-properties';
+import { buildToolArguments, isWriteTool, resolveTool } from './shared/toolMapping';
 
 const API_BASE_URL = 'https://api.adspirer.ai';
 
@@ -41,6 +45,10 @@ interface AdspireErrorEnvelope {
 
 type AdspireEnvelope = AdspireSuccessEnvelope | AdspireErrorEnvelope;
 
+const platformSelect = buildPlatformSelect();
+const operationSelects = PLATFORMS.flatMap(buildOperationsForPlatform);
+const fieldDefinitions = PLATFORMS.flatMap(buildFieldsForPlatform);
+
 export class Adspirer implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Adspirer',
@@ -48,7 +56,7 @@ export class Adspirer implements INodeType {
 		icon: { light: 'file:adspirer.svg', dark: 'file:adspirer.dark.svg' },
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{"Google Ads — " + $parameter["operation"]}}',
+		subtitle: '={{$parameter["platform"] + " — " + $parameter["operation"]}}',
 		description:
 			'Manage ad campaigns across Google, Meta, LinkedIn & TikTok Ads via the Adspirer REST API',
 		defaults: {
@@ -63,7 +71,7 @@ export class Adspirer implements INodeType {
 				required: true,
 			},
 		],
-		properties: [platformSelect, ...googleAdsOperations, ...googleAdsFields],
+		properties: [platformSelect, ...operationSelects, ...fieldDefinitions],
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -73,37 +81,34 @@ export class Adspirer implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			const platform = this.getNodeParameter('platform', i) as string;
-			const operation = this.getNodeParameter('operation', i) as string;
+			const operationId = this.getNodeParameter('operation', i) as string;
 
-			const toolKey = `${platform}.${operation}`;
-			const toolName = TOOL_NAME_MAP[toolKey];
-
-			if (!toolName) {
+			const tool = resolveTool(platform, operationId);
+			if (!tool) {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Unknown operation: ${platform}.${operation}`,
+					`Unknown operation: ${platform}.${operationId}`,
 					{ itemIndex: i },
 				);
 			}
 
-			const toolArguments = buildToolArguments(this, i, platform, operation);
+			const toolArguments = buildToolArguments(this, i, tool);
 
 			const headers: Record<string, string> = {
 				'Content-Type': 'application/json',
 				Accept: 'application/json',
 			};
-			if (isWriteTool(toolName)) {
+			if (isWriteTool(tool)) {
 				headers['Idempotency-Key'] = `n8n-${workflowExecId}-${i}`;
 			}
 
 			const requestOptions: IHttpRequestOptions = {
 				method: 'POST',
-				url: `${API_BASE_URL}/api/v1/tools/${toolName}/execute`,
+				url: `${API_BASE_URL}/api/v1/tools/${tool.name}/execute`,
 				body: { arguments: toolArguments },
 				json: true,
 				headers,
 				returnFullResponse: true,
-				// n8n surfaces statusCode ourselves so we can handle 402/429 specifically
 				ignoreHttpStatusErrors: true,
 			};
 
@@ -158,8 +163,8 @@ export class Adspirer implements INodeType {
 				json: {
 					success: true,
 					platform,
-					operation,
-					tool: toolName,
+					operation: operationId,
+					tool: tool.name,
 					text: success.data.text ?? '',
 					structured: success.data.structured ?? null,
 					_adspirer_quota: success.data.quota ?? null,

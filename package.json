@@ -16,6 +16,7 @@
 		"url": "https://github.com/amekala/n8n-nodes-adspirer.git"
 	},
 	"scripts": {
+		"codegen": "node scripts/generate-operations.js",
 		"build": "n8n-node build",
 		"build:watch": "tsc --watch",
 		"dev": "n8n-node dev",

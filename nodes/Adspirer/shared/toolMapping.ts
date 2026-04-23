@@ -1,49 +1,58 @@
 import type { IExecuteFunctions } from 'n8n-workflow';
+import { findTool } from './build-properties';
+import type { ToolMeta } from '../generated/tools';
 
 /**
- * Maps n8n UI operation keys to REST API tool names.
- * Format: "platform.operation" → "tool_name"
+ * Resolve the underlying REST tool name from the n8n UI selection.
+ * Returns the tool metadata so callers can also read read-only/destructive flags.
  */
-export const TOOL_NAME_MAP: Record<string, string> = {
-	'googleAds.listCampaigns': 'list_campaigns',
-};
-
-/**
- * Write operations require an Idempotency-Key header.
- * Detected by tool name prefix.
- */
-export function isWriteTool(toolName: string): boolean {
-	return /^(create_|add_|update_|upload_|delete_|pause_|enable_|remove_)/.test(toolName);
+export function resolveTool(platform: string, operationId: string): ToolMeta | undefined {
+	return findTool(platform as ToolMeta['platform'], operationId);
 }
 
 /**
- * Builds REST tool arguments from n8n node parameters.
- * Only includes parameters that have non-empty values.
+ * A tool is a "write" operation if it's not read-only. Destructive implies write.
+ * Used to decide whether to send an Idempotency-Key header.
+ */
+export function isWriteTool(tool: ToolMeta): boolean {
+	return !tool.readOnly;
+}
+
+/**
+ * Build the REST API's `arguments` payload from n8n's UI parameters.
+ * Only includes values the user actually filled in.
  */
 export function buildToolArguments(
 	context: IExecuteFunctions,
 	itemIndex: number,
-	platform: string,
-	operation: string,
+	tool: ToolMeta,
 ): Record<string, unknown> {
 	const args: Record<string, unknown> = {};
 
-	const getParam = (name: string): unknown => {
+	for (const arg of tool.args) {
+		let value: unknown;
 		try {
-			const value = context.getNodeParameter(name, itemIndex);
-			if (value === '' || value === undefined || value === null) return undefined;
-			return value;
+			value = context.getNodeParameter(arg.name, itemIndex);
 		} catch {
-			return undefined;
+			continue;
 		}
-	};
 
-	if (platform === 'googleAds' && operation === 'listCampaigns') {
-		const customerId = getParam('customer_id');
-		if (customerId !== undefined) args.customer_id = customerId;
+		if (value === '' || value === undefined || value === null) {
+			if (arg.required) {
+				// let the server throw a clear 400 — better than us guessing
+				continue;
+			}
+			continue;
+		}
 
-		const statusFilter = getParam('status_filter');
-		if (statusFilter !== undefined) args.status_filter = statusFilter;
+		// Coerce numeric fields that we forced to string (optional numerics)
+		if ((arg.type === 'integer' || arg.type === 'number') && typeof value === 'string') {
+			const n = Number(value);
+			if (Number.isNaN(n)) continue;
+			value = arg.type === 'integer' ? Math.trunc(n) : n;
+		}
+
+		args[arg.name] = value;
 	}
 
 	return args;
