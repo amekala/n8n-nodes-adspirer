@@ -38,6 +38,10 @@
 			"dist/nodes/Adspirer/Adspirer.node.js"
 		]
 	},
+	"dependencies": {
+		"@langchain/core": "^0.3.0",
+		"zod": "^3.22.0"
+	},
 	"devDependencies": {
 		"@n8n/node-cli": ">=0.23.0",
 		"eslint": "^9.0.0",

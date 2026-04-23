@@ -7,7 +7,9 @@ import {
 	type INodeExecutionData,
 	type INodeType,
 	type INodeTypeDescription,
+	type ISupplyDataFunctions,
 	type JsonObject,
+	type SupplyData,
 } from 'n8n-workflow';
 import {
 	PLATFORMS,
@@ -16,6 +18,7 @@ import {
 	buildPlatformSelect,
 } from './shared/build-properties';
 import { buildToolArguments, isWriteTool, resolveTool } from './shared/toolMapping';
+import type { ToolMeta } from './generated/tools';
 
 const API_BASE_URL = 'https://api.adspirer.ai';
 
@@ -174,4 +177,131 @@ export class Adspirer implements INodeType {
 
 		return [returnData];
 	}
+
+	/**
+	 * AI Agent (LangChain) integration. n8n's ToolsAgent invokes supplyData()
+	 * on every node wired into its `ai_tool` slot. We return a DynamicStructuredTool
+	 * whose schema is derived from the tool metadata we generated from the REST
+	 * OpenAPI spec — so the agent sees typed, described arguments and can call
+	 * the tool without our node doing argument discovery at prompt time.
+	 */
+	async supplyData(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData> {
+		// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports -- LangChain tool needed for AI Agent integration; same pattern as n8n-nodes-mcp (227k weekly downloads)
+		const { DynamicStructuredTool } = await import('@langchain/core/tools');
+		const { z } = await import('zod');
+
+		const platform = this.getNodeParameter('platform', itemIndex) as string;
+		const operationId = this.getNodeParameter('operation', itemIndex) as string;
+		const tool = resolveTool(platform, operationId);
+		if (!tool) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Unknown operation: ${platform}.${operationId}`,
+				{ itemIndex },
+			);
+		}
+
+		const schema = buildZodSchemaForTool(z, tool);
+		const node = this.getNode();
+		// Pre-extract what the tool's func closure needs so we don't alias `this`
+		// (which would keep stale references and upset the no-this-alias lint rule).
+		const httpRequestWithAuth = this.helpers.httpRequestWithAuthentication.bind(this);
+		const userDefaults = buildToolArguments(
+			this as unknown as IExecuteFunctions,
+			itemIndex,
+			tool,
+		);
+
+		const dynamicTool = new DynamicStructuredTool({
+			name: tool.operationId,
+			description: `[${platform}] ${tool.displayName}. ${tool.description}`,
+			schema,
+			func: async (agentInput: Record<string, unknown>): Promise<string> => {
+				// Merge the user's pre-configured argument defaults with whatever
+				// the agent provided this turn. Agent overrides win.
+				const merged: Record<string, unknown> = { ...userDefaults };
+				for (const [k, v] of Object.entries(agentInput)) {
+					if (v !== undefined && v !== null && v !== '') merged[k] = v;
+				}
+
+				const headers: Record<string, string> = {
+					'Content-Type': 'application/json',
+					Accept: 'application/json',
+				};
+				if (isWriteTool(tool)) {
+					// Agent calls can loop — a stable key per (node, tool) prevents
+					// double-execution on agent retries.
+					headers['Idempotency-Key'] = `n8n-agent-${node.id}-${tool.operationId}-${itemIndex}`;
+				}
+
+				const requestOptions: IHttpRequestOptions = {
+					method: 'POST',
+					url: `${API_BASE_URL}/api/v1/tools/${tool.name}/execute`,
+					body: { arguments: merged },
+					json: true,
+					headers,
+					returnFullResponse: true,
+					ignoreHttpStatusErrors: true,
+				};
+
+				const response = await httpRequestWithAuth('adspireApi', requestOptions);
+				const statusCode = response.statusCode as number;
+				const env = response.body as AdspireEnvelope;
+
+				if (!env || env.success === false || statusCode >= 400) {
+					const err = env as AdspireErrorEnvelope | undefined;
+					const msg = err?.error ?? `Adspirer API returned ${statusCode}`;
+					const upgradeUrl = err?.quota?.upgrade_url;
+					throw new NodeOperationError(
+						node,
+						upgradeUrl ? `${msg} — upgrade: ${upgradeUrl}` : msg,
+						{ itemIndex },
+					);
+				}
+
+				const okEnv = env as AdspireSuccessEnvelope;
+				// Return the LLM-readable summary. If the tool only returned
+				// structured data, stringify it.
+				return (
+					okEnv.data.text ??
+					(okEnv.data.structured ? JSON.stringify(okEnv.data.structured) : '')
+				);
+			},
+		});
+
+		return { response: dynamicTool };
+	}
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- zod typings are dynamic here
+function buildZodSchemaForTool(z: any, tool: ToolMeta): any {
+	const shape: Record<string, unknown> = {};
+	for (const arg of tool.args) {
+		let field: unknown;
+		if (arg.enum && arg.enum.length > 0) {
+			field = z.enum(arg.enum as [string, ...string[]]);
+		} else {
+			switch (arg.type) {
+				case 'boolean':
+					field = z.boolean();
+					break;
+				case 'integer':
+					field = z.number().int();
+					break;
+				case 'number':
+					field = z.number();
+					break;
+				case 'string':
+				default:
+					field = z.string();
+			}
+		}
+		// The agent can omit any arg — the user's pre-configured defaults kick in.
+		field = (field as { optional(): unknown }).optional();
+		if (arg.description) {
+			field = (field as { describe(d: string): unknown }).describe(arg.description);
+		}
+		shape[arg.name] = field;
+	}
+	return z.object(shape);
 }
