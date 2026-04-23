@@ -19,6 +19,16 @@ export function isWriteTool(tool: ToolMeta): boolean {
 }
 
 /**
+ * n8n parameter names that belong to our own UI (the Platform and Operation
+ * dropdowns). REST tool args with the same name would collide — getNodeParameter
+ * would return our dropdown value instead of a user-filled tool arg. We skip
+ * them here so they're never sent to the REST API by default. When the tool
+ * is invoked as an AI Agent tool, the agent can still set these via its input
+ * (merged in by supplyData).
+ */
+const RESERVED_UI_PARAM_NAMES = new Set(['platform', 'operation']);
+
+/**
  * Build the REST API's `arguments` payload from n8n's UI parameters.
  * Only includes values the user actually filled in.
  */
@@ -30,6 +40,8 @@ export function buildToolArguments(
 	const args: Record<string, unknown> = {};
 
 	for (const arg of tool.args) {
+		if (RESERVED_UI_PARAM_NAMES.has(arg.name)) continue;
+
 		let value: unknown;
 		try {
 			value = context.getNodeParameter(arg.name, itemIndex);

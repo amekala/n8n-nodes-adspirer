@@ -178,15 +178,24 @@ function argToProperty(platform: Platform, operationId: string, arg: ToolArg): I
 	return base;
 }
 
+// Tool args whose names collide with our own n8n UI parameters. We can't
+// render a UI field for these (n8n's namespace is flat) — the only way to
+// pass them is via the AI Agent's structured input. See toolMapping.ts for
+// the matching skip in buildToolArguments.
+const RESERVED_UI_PARAM_NAMES = new Set(['platform', 'operation']);
+
 export function buildFieldsForPlatform(platform: Platform): INodeProperties[] {
 	const fields: INodeProperties[] = [];
 	for (const tool of getExposableTools(platform)) {
 		for (const arg of tool.args) {
+			if (RESERVED_UI_PARAM_NAMES.has(arg.name)) continue;
 			fields.push(argToProperty(platform, tool.operationId, arg));
 		}
 	}
 	return fields;
 }
+
+export { RESERVED_UI_PARAM_NAMES };
 
 export function findTool(platform: Platform, operationId: string): ToolMeta | undefined {
 	return TOOLS.find((t) => t.platform === platform && t.operationId === operationId);
