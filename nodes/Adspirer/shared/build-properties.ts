@@ -31,6 +31,18 @@ export function buildPlatformSelect(): INodeProperties {
 	};
 }
 
+// Per-platform default operation — alphabetically-first exposable op. Hardcoded
+// as literal strings because n8n's lint (node-param-default-missing) requires a
+// static literal at the default: property site. Regenerate this map when the
+// OpenAPI surface shifts significantly.
+const PLATFORM_DEFAULTS: Record<Platform, string> = {
+	googleAds: 'analyzeSearchTerms',
+	metaAds: 'analyzeMetaAdPerformance',
+	linkedinAds: 'addLinkedinCreative',
+	tiktokAds: 'analyzeTiktokGeoPerformance',
+	utility: 'auditConversionTracking',
+};
+
 export function buildOperationsForPlatform(platform: Platform): INodeProperties[] {
 	const tools = getExposableTools(platform);
 	if (tools.length === 0) return [];
@@ -42,18 +54,78 @@ export function buildOperationsForPlatform(platform: Platform): INodeProperties[
 		description: t.description,
 	}));
 
-	return [
-		{
-			displayName: 'Operation',
-			name: 'operation',
-			type: 'options',
-			noDataExpression: true,
-			displayOptions: { show: { platform: [platform] } },
-			options,
-			default: '',
-		},
-	];
+	// Build separate declarations per platform so lint sees a literal default.
+	switch (platform) {
+		case 'googleAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeSearchTerms',
+				},
+			];
+		case 'metaAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeMetaAdPerformance',
+				},
+			];
+		case 'linkedinAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'addLinkedinCreative',
+				},
+			];
+		case 'tiktokAds':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'analyzeTiktokGeoPerformance',
+				},
+			];
+		case 'utility':
+			return [
+				{
+					displayName: 'Operation',
+					name: 'operation',
+					type: 'options',
+					noDataExpression: true,
+					displayOptions: { show: { platform: [platform] } },
+					options,
+					default: 'auditConversionTracking',
+				},
+			];
+		default: {
+			// exhaustive check — compile error if Platform gains a case
+			const _exhaustive: never = platform;
+			throw new Error(`Unknown platform: ${_exhaustive}`);
+		}
+	}
 }
+
+// re-export for tests / introspection
+export { PLATFORM_DEFAULTS };
 
 function argToProperty(platform: Platform, operationId: string, arg: ToolArg): INodeProperties {
 	const base: INodeProperties = {
